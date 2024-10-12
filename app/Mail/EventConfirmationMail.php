@@ -14,13 +14,13 @@ class EventConfirmationMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public $event;
+    public $booking;
     /**
      * Create a new message instance.
      */
-    public function __construct($event)
+    public function __construct($booking)
     {
-        $this->event = $event;
+        $this->booking = $booking;
     }
 
     /**
@@ -29,7 +29,7 @@ class EventConfirmationMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: $this->event['event_name'].' Event Confirmation Mail',
+            subject: $this->booking->event->name.' Event Confirmation Mail',
         );
     }
 

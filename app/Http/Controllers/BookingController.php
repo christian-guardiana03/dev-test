@@ -59,7 +59,7 @@ class BookingController extends Controller
         $booking->booking_timezone = $request->input('booking_timezone');
         $booking->save();
 
-        $this->createGoogleEvent($request, $event);
+        $this->createGoogleEvent($request, $booking);
 
         return view('bookings.thank-you', ['booking' => $booking]);
     }
@@ -98,16 +98,18 @@ class BookingController extends Controller
         return $timeSlots;
     }
     
-    public function createGoogleEvent($request, $event): void {
+    public function createGoogleEvent($request, $booking): void {
 
         $googleCalendar = new GoogleCalendarEvent;
 
         $startTime = Carbon::createFromFormat('Y-m-d H:i', $request->input('booking_date').' '.$request->input('booking_time'), $request->input('booking_timezone'));
         $startTime->setTimezone('Asia/Manila');
-        $endTime = (clone $startTime)->addMinutes($event->duration);
+        $endTime = (clone $startTime)->addMinutes($booking->event->duration);
 
-        $googleCalendar->name = $event->name;
-        $googleCalendar->description = $event->name.' Event';
+        $eventName = $booking->event->name;
+
+        $googleCalendar->name = $eventName;
+        $googleCalendar->description = $eventName.' Event';
         $googleCalendar->startDateTime = $startTime;
         $googleCalendar->endDateTime = $endTime;
         $googleCalendar->save();
@@ -115,27 +117,18 @@ class BookingController extends Controller
         // Generate an ICalendar and put it in a file
         $vcalendar = new VObject\Component\VCalendar([
             'VEVENT' => [
-                'SUMMARY' => $event->name,
-                'DESCRIPTION' => "You are Invited for the $event->name Event.",
+                'SUMMARY' => $booking->event->name,
+                'DESCRIPTION' => "You are Invited for the $eventName Event.",
                 'DTSTART' => $startTime,
                 'DTEND'   => $endTime,
                 'ORGANIZER' => env('MAIL_FROM_ADDRESS'),
-                'ATTENDEE' => [$request->input('attendee_email')],
+                'ATTENDEE' => "ATTENDEE;CN=".$request->attendee_email.":mailto:" . $request->attendee_email . "\n",
             ]
         ]);
         
         file_put_contents(public_path('attachments/invite.ics'), $vcalendar->serialize());
 
-        $eventDetails = [
-            'attendee_name' => $request->input('attendee_name'),
-            'attendee_email' => $request->input('attendee_email'),
-            'startDateTime' => $startTime->toDateTimeString(),
-            'endDateTime' => $endTime->toDateTimeString(),
-            'event_name' => $event->name
-        ];
-
-        Mail::to($request->input('attendee_email'))
-            ->send(new EventConfirmationMail($eventDetails));
+        Mail::to($request->input('attendee_email'))->send(new EventConfirmationMail($booking));
 
     }
 }

@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\Event;
+use App\Models\Booking;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\EventReminderMail;
 use Carbon\Carbon;
@@ -28,32 +28,21 @@ class SendReminderEmail extends Command
      * Execute the console command.
      */
     public function handle()
-    {
-        $events = Event::whereHas('bookings', function($query){
-                    $query->where('local_start_time', '=', Carbon::now()->addHour()->setTimezone('Asia/Manila')->format('H:i'));
-                })->with(['bookings' => function ($query) {
-                    $query->where('local_start_time', '=', Carbon::now()->addHour()->setTimezone('Asia/Manila')->format('H:i'));
-                }])->get();
-       
-        foreach ($events as $event) {
+    {   
+        $currentAddOneHour = Carbon::now()->addHour()->setTimezone('Asia/Manila')->format('H:i');
 
-            foreach ($event->bookings as $booking) {
-                $recipientEmail = $booking->attendee_email;
-                $startTime = Carbon::parse($booking->booking_date.' '.$booking->booking_time);
-                $endTime = (clone $startTime)->addMinutes($event->duration);
+        $bookings = Booking::where('local_start_time', '=', $currentAddOneHour)->get();
+        
+        foreach ($bookings as $booking) {
 
-                $eventDetails = [
-                    'attendee_name' => $booking->attendee_name,
-                    'event_name' => $event->name, 
-                    'startDateTime' => $startTime->toDateTimeString(),
-                    'endDateTime' => $endTime->toDateTimeString()
-                ];
+            $recipientEmail = $booking->attendee_email;
+            $startTime = Carbon::parse($booking->booking_date.' '.$booking->booking_time);
+            $endTime = (clone $startTime)->addMinutes($booking->event->duration);
 
-                // Send the reminder email
-                Mail::to($recipientEmail)->send(new EventReminderMail($eventDetails));
+            // Send the reminder email
+            Mail::to($recipientEmail)->send(new EventReminderMail($booking));
 
-                echo "Reminder sent to: $recipientEmail \n";
-            }
+            echo "Reminder sent to: $recipientEmail \n";
         }
     }
 }
