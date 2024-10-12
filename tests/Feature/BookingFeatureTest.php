@@ -21,7 +21,7 @@ class BookingFeatureTest extends TestCase
         $response = $this->actingAs($user)->post('/events/' . $event->id . '/book', [
             'event_id' => $event->id,
             'booking_time' => Carbon::parse('2024-10-14 08:00')->format('H:i'),
-            'booking_date' => Carbon::parse('2024-10-14 08:30')->format('Y-m-d'),
+            'booking_date' => Carbon::parse('2024-10-14 08:00')->format('Y-m-d'),
             'attendee_email' => 'test@test.com',
             'attendee_name' => 'Best Tester',
             'booking_timezone' => 'Asia/Manila'
