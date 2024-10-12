@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Sabre//Sabre VObject 4.5.5//EN
+CALSCALE:GREGORIAN
+BEGIN:VEVENT
+UID:sabre-vobject-16c0b6a8-77c6-4e53-969a-3fb3fdd42bb3
+DTSTAMP:20241012T044225Z
+SUMMARY:Discovery Call
+DESCRIPTION:You are Invited for Discovery Call Event.
+DTSTART;TZID=Asia/Manila:20241012T043000
+DTEND;TZID=Asia/Manila:20241012T044500
+ORGANIZER:christianrey.guardiana@gmail.com
+ATTENDEE:christian.guardiana4674@gmail.com
+END:VEVENT
+END:VCALENDAR

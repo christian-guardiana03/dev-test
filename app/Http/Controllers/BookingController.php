@@ -4,8 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Event;
+use Spatie\GoogleCalendar\Event as GoogleCalendarEvent;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\EventConfirmationMail;
+use Sabre\VObject;
+use App\Http\Requests\BookingFormRequest;
+
+use Google_Client;
+use Google_Service_Calendar;
+use Google_Service_Calendar_ConferenceData;
+use Google_Service_Calendar_CreateConferenceRequest;
+use Google_Service_Calendar_Event;
+use Google_Service_Calendar_ConferenceSolutionKey;
+
 
 class BookingController extends Controller
 {
@@ -16,9 +30,24 @@ class BookingController extends Controller
         return view('bookings.index', compact('bookings'));
     }
 
-    public function store(Request $request, $eventId)
-    {
+    public function store(BookingFormRequest $request, $eventId)
+    {  
         $event = Event::findOrFail($eventId);
+
+        // check first if there is a duplicate booking time and date
+        $checkBooking = Booking::where([
+            'event_id' => $eventId, 
+            'booking_date' => $request->input('booking_date'), 
+            'booking_time' => $request->input('booking_time'),
+            'booking_timezone' => $request->input('booking_timezone')
+        ])->first();
+        
+        if ($checkBooking) {
+            return Redirect::route('bookings.create', $eventId)->with(['status' => 'error', 'message' => 'Unfortunately, this time slot is no longer available. Please try a different time slot.']);
+        }
+
+        $localTime = Carbon::createFromFormat('Y-m-d H:i', $request->input('booking_date').' '.$request->input('booking_time'), $request->input('booking_timezone'));
+        $localTime->setTimezone('Asia/Manila');
 
         $booking = new Booking();
         $booking->attendee_name = $request->input('attendee_name');
@@ -26,7 +55,11 @@ class BookingController extends Controller
         $booking->event_id = $eventId;
         $booking->booking_date = $request->input('booking_date');
         $booking->booking_time = $request->input('booking_time');
+        $booking->local_start_time = $localTime;
+        $booking->booking_timezone = $request->input('booking_timezone');
         $booking->save();
+
+        $this->createGoogleEvent($request, $event);
 
         return view('bookings.thank-you', ['booking' => $booking]);
     }
@@ -38,7 +71,10 @@ class BookingController extends Controller
 
         $timeSlots = $this->generateTimeSlots($selectedDate);
 
-        return view('bookings.calendar', compact('event', 'timeSlots', 'selectedDate'));
+        $timeZones = timezone_identifiers_list();
+        $selectedTimeZone = $request->input('timezone', "Asia/Manila");
+
+        return view('bookings.calendar', compact('event', 'timeSlots', 'selectedDate', 'timeZones', 'selectedTimeZone'));
     }
 
     private function generateTimeSlots($date)
@@ -60,5 +96,46 @@ class BookingController extends Controller
         }
 
         return $timeSlots;
+    }
+    
+    public function createGoogleEvent($request, $event): void {
+
+        $googleCalendar = new GoogleCalendarEvent;
+
+        $startTime = Carbon::createFromFormat('Y-m-d H:i', $request->input('booking_date').' '.$request->input('booking_time'), $request->input('booking_timezone'));
+        $startTime->setTimezone('Asia/Manila');
+        $endTime = (clone $startTime)->addMinutes($event->duration);
+
+        $googleCalendar->name = $event->name;
+        $googleCalendar->description = $event->name.' Event';
+        $googleCalendar->startDateTime = $startTime;
+        $googleCalendar->endDateTime = $endTime;
+        $googleCalendar->save();
+
+        // Generate an ICalendar and put it in a file
+        $vcalendar = new VObject\Component\VCalendar([
+            'VEVENT' => [
+                'SUMMARY' => $event->name,
+                'DESCRIPTION' => "You are Invited for the $event->name Event.",
+                'DTSTART' => $startTime,
+                'DTEND'   => $endTime,
+                'ORGANIZER' => env('MAIL_FROM_ADDRESS'),
+                'ATTENDEE' => [$request->input('attendee_email')],
+            ]
+        ]);
+        
+        file_put_contents(public_path('attachments/invite.ics'), $vcalendar->serialize());
+
+        $eventDetails = [
+            'attendee_name' => $request->input('attendee_name'),
+            'attendee_email' => $request->input('attendee_email'),
+            'startDateTime' => $startTime->toDateTimeString(),
+            'endDateTime' => $endTime->toDateTimeString(),
+            'event_name' => $event->name
+        ];
+
+        Mail::to($request->input('attendee_email'))
+            ->send(new EventConfirmationMail($eventDetails));
+
     }
 }
